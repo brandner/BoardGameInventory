@@ -1,0 +1,15 @@
+name = "boardgameinventory"
+compatibility_date = "2024-04-05"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "bgi-db"
+database_id = "bfb4b20c-9016-4e34-9e87-327230495fb7"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "bgi-photos"
