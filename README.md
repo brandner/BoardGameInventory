@@ -44,7 +44,7 @@ Staff photograph a shelf, Gemini extracts the game titles/publishers from the ph
 
 ## Authentication Model
 
-- **Search (`/api/games/*`, except `/init`) is public.** Anyone can search the inventory or log a missing game via "log it here" — no PIN required. This is intended for customer self-service (e.g. a kiosk or a shared link).
+- **Search (`/api/games/*`, except `/init`) is public.** Anyone can search the inventory or log a missing game via "log it here" — no PIN required. This is intended for customer self-service (e.g. a kiosk or a shared link). Public search results confirm a game is in stock ("✅ In stock — ask staff for the shelf") but omit the shelf name; if the caller presents a valid Admin PIN, the same `/api/games/search` response includes the shelf too. In the UI this means staff who are already logged into Admin get the shelf location automatically when they use the same Search page.
 - **Admin (`/api/admin/*`, plus `/api/games/init`) is gated by a single shared PIN** (`APP_PIN`), sent as either the `x-app-pin` header or a `pin` query parameter. There is **no further split within Admin** — anyone with the PIN can upload/analyze shelf photos (which costs Gemini API usage), export/import the full inventory, and wipe the database. This is a deliberate simplicity tradeoff for a small, single-location, trusted-staff tool, not a general-purpose access control system.
 
 Destructive admin actions (Wipe Inventory, Import/Restore) require typing a confirmation word in addition to the PIN, to guard against accidental clicks.

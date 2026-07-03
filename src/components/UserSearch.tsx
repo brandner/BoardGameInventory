@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function UserSearch() {
+export default function UserSearch({ pin }: { pin?: string }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,7 @@ export default function UserSearch() {
     setShowManual(false);
 
     try {
-      const res = await fetch(`/api/games/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/games/search?q=${encodeURIComponent(query)}`, pin ? { headers: { 'x-app-pin': pin } } : undefined);
       const data = await res.json();
       setResults(data.results || []);
     } catch (e) {
@@ -106,9 +106,15 @@ export default function UserSearch() {
                   <div className="text-sm opacity-80 mt-1">{game.publisher || 'Unknown Publisher'}</div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--accent-bg)] text-[var(--accent)] font-medium text-sm">
-                    Location: {game.shelf_name}
-                  </span>
+                  {game.shelf_name ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--accent-bg)] text-[var(--accent)] font-medium text-sm">
+                      Location: {game.shelf_name}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 text-green-500 font-medium text-sm">
+                      ✅ In stock — ask staff for the shelf
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

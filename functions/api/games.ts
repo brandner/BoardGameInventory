@@ -3,6 +3,21 @@ import { Env } from './[[route]]';
 
 export const gameRoutes = new Hono<{ Bindings: Env }>();
 
+// Shelf location is only included for callers presenting a valid admin PIN.
+// Public search just confirms "we have it" — staff searching from the same
+// page see the shelf too, once logged into Admin elsewhere in the app.
+function isAdminCaller(c: { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined }; env: Env }) {
+  const expectedPin = c.env.APP_PIN;
+  if (!expectedPin) return true; // no PIN configured (local dev) — no boundary to enforce
+  const reqPin = c.req.header('x-app-pin') || c.req.query('pin');
+  return reqPin === expectedPin;
+}
+
+function stripShelfUnlessAdmin<T extends { shelf_name?: unknown }>(rows: T[], isAdmin: boolean) {
+  if (isAdmin) return rows;
+  return rows.map(({ shelf_name, ...rest }) => rest);
+}
+
 gameRoutes.get('/init', async (c) => {
   await c.env.DB.exec(`
     CREATE TABLE IF NOT EXISTS Shelves (id TEXT PRIMARY KEY, name TEXT NOT NULL, photo_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
@@ -15,6 +30,8 @@ gameRoutes.get('/init', async (c) => {
 gameRoutes.get('/search', async (c) => {
   const q = c.req.query('q');
   if (!q || !q.trim()) return c.json({ error: 'Missing query parameter', results: [] }, 400);
+
+  const isAdmin = isAdminCaller(c);
 
   // 1. Strip punctuation (like '.' or '&') out completely.
   // 2. Strip standard English stop words (like 'and', 'the').
@@ -33,7 +50,7 @@ gameRoutes.get('/search', async (c) => {
         FROM Games g JOIN Shelves s ON g.shelf_id = s.id
         WHERE g.title LIKE ? OR g.publisher LIKE ? ORDER BY g.title ASC LIMIT 50
       `).bind(fallback, fallback).all();
-      return c.json({ results: fallbackResult.results });
+      return c.json({ results: stripShelfUnlessAdmin(fallbackResult.results as { shelf_name?: unknown }[], isAdmin) });
   }
 
   // 4. Dynamically chain SQL statements so every keyword must be present ANYWHERE.
@@ -53,22 +70,22 @@ gameRoutes.get('/search', async (c) => {
   sql += ` ORDER BY g.title ASC LIMIT 50`;
 
   const result = await c.env.DB.prepare(sql).bind(...binds).all();
-  return c.json({ results: result.results });
+  return c.json({ results: stripShelfUnlessAdmin(result.results as { shelf_name?: unknown }[], isAdmin) });
 });
 
 // Search by exact publisher
 gameRoutes.get('/publisher/:publisher', async (c) => {
   const publisher = c.req.param('publisher');
-  
+
   const result = await c.env.DB.prepare(`
-    SELECT g.id, g.title, g.bgg_id, s.name as shelf_name 
+    SELECT g.id, g.title, g.bgg_id, s.name as shelf_name
     FROM Games g
     JOIN Shelves s ON g.shelf_id = s.id
     WHERE g.publisher = ?
     ORDER BY g.title ASC
   `).bind(publisher).all();
 
-  return c.json({ results: result.results });
+  return c.json({ results: stripShelfUnlessAdmin(result.results as { shelf_name?: unknown }[], isAdminCaller(c)) });
 });
 
 // Provide a safe list of available shelves for the manual logging dropdown

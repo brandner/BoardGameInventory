@@ -73,7 +73,9 @@ function App() {
       </header>
 
       <main className="flex-grow p-4 md:p-8 flex flex-col items-center">
-        {view === 'search' ? <UserSearch /> : <AdminPanel pin={pin} />}
+        {view === 'search'
+          ? <UserSearch pin={isAdminAuthenticated ? pin : undefined} />
+          : <AdminPanel pin={pin} />}
       </main>
     </div>
   );
