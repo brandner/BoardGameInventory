@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function UserSearch({ pin }: { pin: string }) {
+export default function UserSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export default function UserSearch({ pin }: { pin: string }) {
 
   useEffect(() => {
     if (showManual && shelves.length === 0) {
-      fetch(`/api/games/shelves`, { headers: { 'x-app-pin': pin } })
+      fetch(`/api/games/shelves`)
         .then(res => res.json())
         .then(data => {
           if (data.shelves && data.shelves.length > 0) {
@@ -28,18 +28,18 @@ export default function UserSearch({ pin }: { pin: string }) {
         })
         .catch(console.error);
     }
-  }, [showManual, pin, shelves.length]);
+  }, [showManual, shelves.length]);
 
   const search = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!query) return;
-    
+
     setLoading(true);
     setSearched(true);
     setShowManual(false);
-    
+
     try {
-      const res = await fetch(`/api/games/search?q=${encodeURIComponent(query)}&pin=${pin}`);
+      const res = await fetch(`/api/games/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       setResults(data.results || []);
     } catch (e) {
@@ -53,12 +53,11 @@ export default function UserSearch({ pin }: { pin: string }) {
   const submitManualEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualTitle || !manualShelf) return;
-    
+
     await fetch(`/api/games/manual-entry`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-app-pin': pin
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         title: manualTitle,
@@ -66,7 +65,7 @@ export default function UserSearch({ pin }: { pin: string }) {
         shelf_name: manualShelf
       })
     });
-    
+
     setShowManual(false);
     setQuery(manualTitle);
     await search();

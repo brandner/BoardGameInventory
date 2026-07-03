@@ -103,6 +103,24 @@ export default function AdminPanel({ pin }: { pin: string }) {
     }
   };
 
+  const handleExportCsv = async () => {
+    try {
+      const res = await fetch(`/api/admin/export.csv`, { headers: { 'x-app-pin': pin } });
+      if (!res.ok) throw new Error('Export failed');
+      const csv = await res.text();
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bgi-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to export CSV.');
+    }
+  };
+
   const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     e.target.value = '';
@@ -334,12 +352,18 @@ export default function AdminPanel({ pin }: { pin: string }) {
           )}
 
           <div className="mt-8 flex flex-wrap justify-between items-center gap-4 pt-8 border-t border-[var(--border)]">
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleExport}
                 className="px-6 py-2 border border-[var(--border)] rounded font-medium hover:bg-[var(--border)] transition-colors"
               >
                 ⬇️ Export Backup
+              </button>
+              <button
+                onClick={handleExportCsv}
+                className="px-6 py-2 border border-[var(--border)] rounded font-medium hover:bg-[var(--border)] transition-colors"
+              >
+                📄 Export CSV
               </button>
               <button
                 onClick={() => importFileInputRef.current?.click()}

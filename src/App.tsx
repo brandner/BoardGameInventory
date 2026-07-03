@@ -5,10 +5,11 @@ import Auth from './components/Auth';
 
 function App() {
   const [pin, setPin] = useState(localStorage.getItem('app_pin') || '');
-  const [isAuthenticated, setIsAuthenticated] = useState(!!pin);
+  // Optimistic: if a PIN is already stored, assume it's still valid until /auth/verify says otherwise.
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(!!pin);
   const [view, setView] = useState<'search' | 'admin'>('search');
 
-  // Verify PIN on startup or change
+  // Verify PIN on startup or change (only gates the Admin view — Search is public)
   useEffect(() => {
     if (!pin) return;
     fetch('/api/auth/verify', {
@@ -19,19 +20,26 @@ function App() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          setIsAuthenticated(true);
+          setIsAdminAuthenticated(true);
           localStorage.setItem('app_pin', pin);
         } else {
-          setIsAuthenticated(false);
+          setIsAdminAuthenticated(false);
           localStorage.removeItem('app_pin');
           setPin('');
         }
       })
-      .catch(() => setIsAuthenticated(false));
+      .catch(() => setIsAdminAuthenticated(false));
   }, [pin]);
 
-  if (!isAuthenticated) {
-    return <Auth onAuth={setPin} />;
+  const handleLogout = () => {
+    setPin('');
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('app_pin');
+    setView('search');
+  };
+
+  if (view === 'admin' && !isAdminAuthenticated) {
+    return <Auth onAuth={setPin} onCancel={() => setView('search')} />;
   }
 
   return (
@@ -41,33 +49,31 @@ function App() {
           BoardGame<span className="text-[var(--accent)]">Inventory</span>
         </h1>
         <nav className="flex gap-4">
-          <button 
+          <button
             className={`font-medium transition-colors ${view === 'search' ? 'text-[var(--accent)]' : 'hover:text-[var(--text-h)]'}`}
             onClick={() => setView('search')}
           >
             Search
           </button>
-          <button 
+          <button
             className={`font-medium transition-colors ${view === 'admin' ? 'text-[var(--accent)]' : 'hover:text-[var(--text-h)]'}`}
             onClick={() => setView('admin')}
           >
             Admin
           </button>
-          <button 
-            className="text-sm border border-[var(--border)] px-3 py-1 rounded hover:bg-[var(--border)] transition-colors"
-            onClick={() => {
-              setPin('');
-              setIsAuthenticated(false);
-              localStorage.removeItem('app_pin');
-            }}
-          >
-            Logout
-          </button>
+          {isAdminAuthenticated && (
+            <button
+              className="text-sm border border-[var(--border)] px-3 py-1 rounded hover:bg-[var(--border)] transition-colors"
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          )}
         </nav>
       </header>
-      
+
       <main className="flex-grow p-4 md:p-8 flex flex-col items-center">
-        {view === 'search' ? <UserSearch pin={pin} /> : <AdminPanel pin={pin} />}
+        {view === 'search' ? <UserSearch /> : <AdminPanel pin={pin} />}
       </main>
     </div>
   );

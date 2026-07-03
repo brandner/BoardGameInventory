@@ -11,13 +11,15 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>().basePath('/api')
 
 // --- Middleware: Verify PIN ---
+// Search/logging (/api/games/*) is public — customers use it without a PIN.
+// Admin operations (/api/admin/*) and the schema-mutating /api/games/init stay PIN-gated.
 app.use('*', async (c, next) => {
-  if (c.req.path === '/api/auth/verify') {
-    return next(); // skip auth for the auth endpoint itself
+  const path = c.req.path;
+  const requiresPin = path.startsWith('/api/admin') || path === '/api/games/init';
+  if (!requiresPin) {
+    return next();
   }
-  
-  // To keep it simple, expect a pin in the Authorization header or a cookie
-  // For this prototype, we'll check an 'x-app-pin' header or cookie.
+
   const reqPin = c.req.header('x-app-pin') || c.req.query('pin');
   const expectedPin = c.env.APP_PIN;
 

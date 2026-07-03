@@ -126,6 +126,33 @@ adminRoutes.get('/photo/:key', async (c) => {
   return new Response(object.body as ReadableStream, { headers });
 });
 
+// Export full inventory as a CSV (for spreadsheets/accounting)
+adminRoutes.get('/export.csv', async (c) => {
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT s.name as shelf_name, g.title, g.publisher, g.created_at
+    FROM Games g JOIN Shelves s ON g.shelf_id = s.id
+    ORDER BY s.name ASC, g.title ASC
+  `).all();
+
+  const csvField = (value: unknown) => {
+    const str = String(value ?? '');
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+
+  const rows = ['Shelf,Title,Publisher,Date Added'];
+  for (const g of result.results as Record<string, unknown>[]) {
+    rows.push([g.shelf_name, g.title, g.publisher, g.created_at].map(csvField).join(','));
+  }
+
+  return new Response(rows.join('\r\n'), {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="bgi-inventory-${new Date().toISOString().slice(0, 10)}.csv"`
+    }
+  });
+});
+
 // Get Dashboard Overview
 adminRoutes.get('/shelves', async (c) => {
   const db = c.env.DB;

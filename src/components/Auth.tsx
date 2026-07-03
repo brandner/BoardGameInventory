@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Auth({ onAuth }: { onAuth: (pin: string) => void }) {
+export default function Auth({ onAuth, onCancel }: { onAuth: (pin: string) => void; onCancel?: () => void }) {
   const [pin, setPin] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -11,10 +11,18 @@ export default function Auth({ onAuth }: { onAuth: (pin: string) => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[var(--bg)] text-[var(--text)] px-4">
       <div className="max-w-sm w-full p-8 rounded-xl bg-white/5 shadow-[var(--shadow)] border border-[var(--border)] backdrop-blur-md">
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="text-sm opacity-70 hover:opacity-100 mb-4 transition-opacity"
+          >
+            ← Back to Search
+          </button>
+        )}
         <h2 className="text-2xl font-bold text-[var(--text-h)] mb-6 text-center">
           BoardGame<span className="text-[var(--accent)]">Inventory</span>
         </h2>
-        <p className="text-sm text-center mb-6">Enter PIN to access</p>
+        <p className="text-sm text-center mb-6">Enter Admin PIN to access</p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <input
             type="password"

@@ -6,7 +6,7 @@ Staff photograph a shelf, Gemini extracts the game titles/publishers from the ph
 
 ## Architecture
 
-- **Frontend:** React + Vite + TailwindCSS (`src/`), a single PIN-gated page with two views: Search and Admin.
+- **Frontend:** React + Vite + TailwindCSS (`src/`), two views: a public Search page and a PIN-gated Admin page.
 - **API:** Hono running as Cloudflare Pages Functions (`functions/api/`), routed under `/api/*`.
 - **Database:** Cloudflare D1 (SQLite) — two tables, `Shelves` and `Games` (see `schema.sql`).
 - **Storage:** Cloudflare R2 — stores the shelf photos taken during cataloging.
@@ -38,13 +38,14 @@ Staff photograph a shelf, Gemini extracts the game titles/publishers from the ph
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `APP_PIN` | Yes | Single shared PIN gating the entire app (see Authentication Model below). |
+| `APP_PIN` | Yes | PIN gating the Admin view and its API routes (see Authentication Model below). Search is public and doesn't need it. |
 | `GEMINI_API_KEY` | Yes, for AI cataloging | Used by `/api/admin/analyze-shelf` to call the Gemini API. Without it, shelf photos still upload but skip AI extraction — staff fall back to manual entry. |
 | `BGG_API_KEY`, `BGG_API_URL` | No | Reserved for a planned BoardGameGeek lookup/enrichment integration (see `docs/detection_improvement_strategies.md`). **Not currently used anywhere in the app** — safe to omit until that feature is built. |
 
 ## Authentication Model
 
-The app is gated by a single shared PIN (`APP_PIN`), sent as either the `x-app-pin` header or a `pin` query parameter. There is **no separate admin PIN** — anyone with the PIN can search, log games manually, upload/analyze shelf photos (which costs Gemini API usage), export/import the full inventory, and wipe the database. This is a deliberate simplicity tradeoff for a small, single-location, trusted-staff tool, not a general-purpose access control system. Before deploying somewhere with a less trusted user base, consider splitting staff/admin access into separate PINs or a real auth provider.
+- **Search (`/api/games/*`, except `/init`) is public.** Anyone can search the inventory or log a missing game via "log it here" — no PIN required. This is intended for customer self-service (e.g. a kiosk or a shared link).
+- **Admin (`/api/admin/*`, plus `/api/games/init`) is gated by a single shared PIN** (`APP_PIN`), sent as either the `x-app-pin` header or a `pin` query parameter. There is **no further split within Admin** — anyone with the PIN can upload/analyze shelf photos (which costs Gemini API usage), export/import the full inventory, and wipe the database. This is a deliberate simplicity tradeoff for a small, single-location, trusted-staff tool, not a general-purpose access control system.
 
 Destructive admin actions (Wipe Inventory, Import/Restore) require typing a confirmation word in addition to the PIN, to guard against accidental clicks.
 
@@ -111,6 +112,8 @@ Two layers of protection against data loss:
 2. **In-app Export/Import (Admin Dashboard).** Use **⬇️ Export Backup** to download the full inventory (all shelves and games, with their original IDs and timestamps) as a JSON file. Use **⬆️ Import / Restore** to load one back in — this is a **replace-all** operation: it deletes everything currently in the database before restoring from the file, and requires typing `RESTORE` to confirm. Good practice: export a backup before any bulk changes, and periodically for offline safekeeping.
 
 Note that **Wipe Inventory** only clears the `Shelves`/`Games` tables in D1; it does not delete the underlying photos in the R2 bucket.
+
+For a human-readable inventory list (e.g. for the client's own recordkeeping/accounting, not meant for restoring), use **📄 Export CSV** — one row per game with Shelf, Title, Publisher, and Date Added.
 
 ## Roadmap / Not Yet Implemented
 
