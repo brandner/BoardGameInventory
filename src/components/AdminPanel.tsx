@@ -26,8 +26,10 @@ export default function AdminPanel({ pin }: { pin: string }) {
   const [viewingGamesShelfId, setViewingGamesShelfId] = useState<string | null>(null);
   const [shelfGames, setShelfGames] = useState<any[]>([]);
   const [loadingShelfGames, setLoadingShelfGames] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (stage === 'dashboard') {
@@ -62,17 +64,92 @@ export default function AdminPanel({ pin }: { pin: string }) {
   };
 
   const handleWipeInventory = async () => {
-    if (window.confirm("🚨 CRITICAL WARNING 🚨\n\nThis will instantly delete ALL shelves and games from the database. This cannot be undone.\n\nProceed?")) {
-      try {
-        const res = await fetch(`/api/admin/reset`, { method: 'POST', headers: { 'x-app-pin': pin } });
-        if (res.ok) {
-          alert("Inventory successfully wiped.");
-          fetchShelves();
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Failed to wipe database.");
+    const totalGames = shelves.reduce((sum, s) => sum + (s.game_count || 0), 0);
+    const typed = window.prompt(
+      `🚨 CRITICAL WARNING 🚨\n\nThis will permanently delete ${shelves.length} shelves and ${totalGames} games. This cannot be undone.\n\nType WIPE (all caps) to confirm.`
+    );
+    if (typed === null) return;
+    if (typed !== 'WIPE') {
+      alert('Confirmation text did not match "WIPE". Wipe cancelled.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/reset`, { method: 'POST', headers: { 'x-app-pin': pin } });
+      if (res.ok) {
+        alert("Inventory successfully wiped.");
+        fetchShelves();
       }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to wipe database.");
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch(`/api/admin/export`, { headers: { 'x-app-pin': pin } });
+      if (!res.ok) throw new Error('Export failed');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bgi-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to export backup.');
+    }
+  };
+
+  const handleImportFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    e.target.value = '';
+    if (!selected) return;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(await selected.text());
+    } catch {
+      alert('That file is not valid JSON.');
+      return;
+    }
+
+    if (!Array.isArray(parsed.shelves)) {
+      alert('That file does not look like a BoardGameInventory backup.');
+      return;
+    }
+
+    const gameCount = parsed.shelves.reduce((sum: number, s: any) => sum + (s.games?.length || 0), 0);
+    const typed = window.prompt(
+      `🚨 RESTORE WARNING 🚨\n\nThis will REPLACE your current inventory with the backup:\n${parsed.shelves.length} shelves, ${gameCount} games.\n\nEverything currently in the database will be deleted first. This cannot be undone.\n\nType RESTORE (all caps) to confirm.`
+    );
+    if (typed === null) return;
+    if (typed !== 'RESTORE') {
+      alert('Confirmation text did not match "RESTORE". Import cancelled.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/admin/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-pin': pin },
+        body: JSON.stringify(parsed)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Restored ${data.shelfCount} shelves and ${data.gameCount} games.`);
+        fetchShelves();
+      } else {
+        alert(data.error || 'Import failed');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to import backup.');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -256,8 +333,30 @@ export default function AdminPanel({ pin }: { pin: string }) {
             </div>
           )}
 
-          <div className="mt-8 flex justify-end pt-8">
-            <button 
+          <div className="mt-8 flex flex-wrap justify-between items-center gap-4 pt-8 border-t border-[var(--border)]">
+            <div className="flex gap-3">
+              <button
+                onClick={handleExport}
+                className="px-6 py-2 border border-[var(--border)] rounded font-medium hover:bg-[var(--border)] transition-colors"
+              >
+                ⬇️ Export Backup
+              </button>
+              <button
+                onClick={() => importFileInputRef.current?.click()}
+                disabled={importing}
+                className="px-6 py-2 border border-[var(--border)] rounded font-medium hover:bg-[var(--border)] transition-colors disabled:opacity-50"
+              >
+                {importing ? 'Restoring...' : '⬆️ Import / Restore'}
+              </button>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportFileSelected}
+              />
+            </div>
+            <button
               onClick={handleWipeInventory}
               className="px-6 py-2 border border-red-500/30 text-red-500 rounded font-medium hover:bg-red-500 hover:text-white transition-colors"
             >

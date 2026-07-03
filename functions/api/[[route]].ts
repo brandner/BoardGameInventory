@@ -23,7 +23,7 @@ app.use('*', async (c, next) => {
 
   // If no PIN is configured, maybe allow? For security, let's require it unless it's missing in env (local dev)
   if (expectedPin && reqPin !== expectedPin) {
-    return c.json({ error: 'Unauthorized', reqPin, expectedPin }, 401);
+    return c.json({ error: 'Unauthorized' }, 401);
   }
 
   await next();

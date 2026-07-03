@@ -14,7 +14,7 @@ adminRoutes.post('/analyze-shelf', async (c) => {
     return c.json({ error: 'Photo required' }, 400);
   }
 
-  const fileKey = `shelf-${Date.now()}-${file.name}`;
+  const fileKey = `shelf-${crypto.randomUUID()}`;
   const arrayBuffer = await file.arrayBuffer();
 
   // 1. Upload to R2 Bucket
@@ -160,4 +160,68 @@ adminRoutes.post('/reset', async (c) => {
     DELETE FROM Shelves;
   `);
   return c.json({ success: true });
+});
+
+// Export full inventory as a JSON backup
+adminRoutes.get('/export', async (c) => {
+  const db = c.env.DB;
+  const shelvesResult = await db.prepare(`SELECT id, name, photo_url, created_at FROM Shelves ORDER BY created_at ASC`).all();
+  const gamesResult = await db.prepare(`SELECT id, title, publisher, bgg_id, shelf_id, created_at FROM Games ORDER BY created_at ASC`).all();
+
+  const gamesByShelf = new Map<string, unknown[]>();
+  for (const g of gamesResult.results as Record<string, unknown>[]) {
+    const list = gamesByShelf.get(g.shelf_id as string) || [];
+    list.push({ id: g.id, title: g.title, publisher: g.publisher, bgg_id: g.bgg_id, created_at: g.created_at });
+    gamesByShelf.set(g.shelf_id as string, list);
+  }
+
+  const shelves = (shelvesResult.results as Record<string, unknown>[]).map(s => ({
+    id: s.id, name: s.name, photo_url: s.photo_url, created_at: s.created_at,
+    games: gamesByShelf.get(s.id as string) || []
+  }));
+
+  return c.json({ exportedAt: new Date().toISOString(), shelves });
+});
+
+// Import a JSON backup, replacing the entire current inventory
+adminRoutes.post('/import', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || !Array.isArray(body.shelves)) {
+    return c.json({ error: 'Invalid backup file: missing shelves array' }, 400);
+  }
+
+  for (const shelf of body.shelves) {
+    if (typeof shelf.id !== 'string' || typeof shelf.name !== 'string' || !Array.isArray(shelf.games)) {
+      return c.json({ error: 'Invalid backup file: malformed shelf entry' }, 400);
+    }
+    for (const game of shelf.games) {
+      if (typeof game.id !== 'string' || typeof game.title !== 'string') {
+        return c.json({ error: 'Invalid backup file: malformed game entry' }, 400);
+      }
+    }
+  }
+
+  const db = c.env.DB;
+
+  // Replace-all restore: wipe existing inventory before loading the backup
+  await db.exec(`DELETE FROM Games; DELETE FROM Shelves;`);
+
+  const shelfStmt = db.prepare(`INSERT INTO Shelves (id, name, photo_url, created_at) VALUES (?, ?, ?, ?)`);
+  const gameStmt = db.prepare(`INSERT INTO Games (id, title, publisher, bgg_id, shelf_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`);
+
+  const statements = [];
+  let gameCount = 0;
+  for (const shelf of body.shelves) {
+    statements.push(shelfStmt.bind(shelf.id, shelf.name, shelf.photo_url || null, shelf.created_at || new Date().toISOString()));
+    for (const game of shelf.games) {
+      statements.push(gameStmt.bind(game.id, game.title, game.publisher || '', game.bgg_id || null, shelf.id, game.created_at || new Date().toISOString()));
+      gameCount++;
+    }
+  }
+
+  if (statements.length > 0) {
+    await db.batch(statements);
+  }
+
+  return c.json({ success: true, shelfCount: body.shelves.length, gameCount });
 });
